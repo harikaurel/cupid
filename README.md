@@ -255,11 +255,10 @@ bash kraken2.sh
 
 **Key principles:**
 
-* Uses **only AMR-carrying contigs**
-* Plasmids are mapped **only to chromosome contigs**
-* Chromosomes (if assigned to genus level or higher via kraken2) are mapped **only to chromosome contigs**
-* RMSD is computed **purely on Nanomotif methylation vectors**
-* Kraken taxonomy is used **only for annotation**
+* Uses only AMR-carrying plasmid
+* Plasmids are mapped only to chromosome contigs
+* RMSD is computed on Nanomotif methylation vectors
+* Kraken taxonomy is used only for annotation
 
 **Inputs:**
 
@@ -271,7 +270,6 @@ bash kraken2.sh
 **Outputs:**
 
 * AMR plasmid host association table
-* AMR chromosome association table
 
 ```
 python amr_host_association.py \
@@ -290,12 +288,6 @@ python amr_host_association.py \
 
 * One row per **AMR-carrying plasmid**
 * Host inferred via **plasmid → chromosome Nanomotif RMSD**
-
-### AMR chromosome association
-
-* One row per **AMR-carrying chromosome**
-* Kraken species annotation if available
-* Nanomotif-based fallback if not
 
 #### More information: docs/amr_host_association_outputs.md
 
