@@ -3,7 +3,6 @@ set -euo pipefail
 
 # ============================================================
 # Nanomotif: motif discovery + motif–contig scoring
-# (detect_contamination is used only to produce the motif–contig score file)
 # ============================================================
 
 NANOMOTIF_BIN="/path/to/nanomotif"
@@ -15,7 +14,10 @@ CONTIG_BIN_TSV="/path/to/contig2bin.tsv"
 OUT_DIR="/path/to/nanomotif_output"
 
 THREADS=20
-VALID_COVERAGE_THRESHOLD=10
+VALID_COVERAGE_THRESHOLD=1
+MIN_MOTIF_SCORE=0.5
+MIN_MOTIFS_BIN=1
+THRESHOLD_VALID_COVERAGE=1
 
 mkdir -p "$OUT_DIR"
 
@@ -26,14 +28,7 @@ mkdir -p "$OUT_DIR"
   -c "$CONTIG_BIN_TSV" \
   --out "$OUT_DIR" \
   -t "$THREADS" \
-  --threshold_valid_coverage "$VALID_COVERAGE_THRESHOLD"
-
-# 2) Motif–contig scoring (via detect_contamination)
-BIN_MOTIFS_TSV="${OUT_DIR}/bin-motifs.tsv"   # produced by motif_discovery
-
-"$NANOMOTIF_BIN" detect_contamination \
-  --pileup "$PILEUP_BED" \
-  --assembly "$ASSEMBLY_FASTA" \
-  --bin_motifs "$BIN_MOTIFS_TSV" \
-  --contig_bins "$CONTIG_BIN_TSV" \
-  --out "$OUT_DIR"
+  --threshold_valid_coverage "$VALID_COVERAGE_THRESHOLD" \
+    --min_motifs_bin "$MIN_MOTIFS_BIN" \
+  --threshold_valid_coverage "$THRESHOLD_VALID_COVERAGE" \
+  --min_motif_score "$MIN_MOTIF_SCORE" \
