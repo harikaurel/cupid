@@ -10,7 +10,6 @@ Each step is a **standalone script**, but the steps are designed to run **in the
 
 ## Contents
 
-- [Overview](#overview)
 - [Requirements](#requirements)
 - [Input data](#input-data)
 - [Running the pipeline](#running-the-pipeline)
@@ -22,31 +21,6 @@ Each step is a **standalone script**, but the steps are designed to run **in the
 - [Read-level host association](#read-level-host-association)
 - [Mock-community evaluation](#mock-community-evaluation)
 - [Citation](#citation)
-
----
-
-## Overview
-
-```mermaid
-flowchart TD
-    A[Raw POD5 signals] --> B[Basecalling · Dorado]
-    B --> C[Demultiplex → FASTQ]
-    C --> D[Quality / length filtering · chopper]
-    D --> E[Assembly · nanoMDBG]
-    E --> F[Align + polish · Dorado]
-    F --> G[Methylation pileup · modkit]
-    G --> H[Motif discovery · Nanomotif]
-    E --> I[Plasmid / chromosome ID · MobSuite]
-    E --> J[AMR detection · AMRFinderPlus]
-    E --> K[Taxonomy · Kraken2]
-    H --> M[Methylation scoring · epimetheus]
-    M --> L[AMR plasmid → host association]
-    I --> L
-    J --> L
-    K --> L
-```
-
-The core idea: a plasmid and its host chromosome, sharing the same cellular methylation machinery, carry **matching methylation signatures**. By computing the distance between Nanomotif methylation vectors, each AMR-carrying plasmid can be assigned to its most likely bacterial host.
 
 ---
 
