@@ -35,11 +35,12 @@ Each step is a **standalone script**, but the steps are designed to run **in the
 | `chopper` | Read quality & length filtering |
 | `nanoMDBG`| Metagenome assembly |
 | `modkit` | Methylation pileup |
-| `nanomotif` | Methylation motif discovery & host association |
-| `epimetheus` | Per-read methylation scoring (read-level route) |
+| `nanomotif` | Methylation motif discovery|
+| `epimetheus` | Per-read and contig methylation values |
 | `mob_suite` | Plasmid / chromosome classification |
 | `amrfinder` | AMR gene detection |
 | `kraken2` | Taxonomic annotation |
+
 
 ### Python
 
