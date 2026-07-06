@@ -321,7 +321,7 @@ Columns:
 | `dataset` | Sample label (`--dataset`; defaults to the outdir name) |
 | `carbapenemase` | Carbapenemase gene, e.g. `blaOXA-48` |
 | `n_reads` | Number of reads carrying that gene |
-| `top_read_similarity` | Tally of each read's top host species, e.g. `Citrobacter freundii (1), Citrobacter koseri (1), Obesumbacterium proteus (1)` |
+| `top_read_similarity` | Tally of each read's top host species|
 
 Carbapenemases are detected from **both** the AMRFinderPlus `Element symbol` and `Element name` columns, so an OXA carbapenemase reported at family level (symbol `blaOXA`, allele `OXA-48` only in the name) is captured as `blaOXA-48`, while non-carbapenemase oxacillinases such as `blaOXA-1` are excluded. The recognised alleles are controlled by `--carbapenemase-regex`.
 
