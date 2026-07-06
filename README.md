@@ -1,4 +1,4 @@
-# Nanopore AMR-Carrying Plasmid–Host Association Pipeline
+# AMR-Carrying Plasmid–Host Association Pipeline
 
 A **modular, end-to-end pipeline** that takes Oxford Nanopore sequencing data all the way from **raw electrical signals** to **AMR-carrying plasmid → host associations**.
 
@@ -35,18 +35,17 @@ Each step is a **standalone script**, but the steps are designed to run **in the
 | `chopper` | Read quality & length filtering |
 | `nanoMDBG`| Metagenome assembly |
 | `modkit` | Methylation pileup |
-| `nanomotif` | Methylation motif discovery|
-| `epimetheus` | Per-read and contig methylation values |
 | `mob_suite` | Plasmid / chromosome classification |
 | `amrfinder` | AMR gene detection |
 | `kraken2` | Taxonomic annotation |
-
+| `nanomotif` | Methylation motif discovery|
+| `epimetheus` | contig- and read-level methylation values |
+| `cupid` | host association in contig- and read-level|
 
 ### Python
 
 - Python ≥ 3.9
 - Packages: `pandas`, `numpy`, `pysam`
-- Host-association scripts additionally use `scikit-bio` (PCoA) and `matplotlib` (figures); the read-level script also uses `numba` (JIT-compiled scoring)
 
 ---
 
@@ -57,8 +56,6 @@ You typically start with:
 - Raw Nanopore `.pod5` files
 - The sequencing kit name (required for Dorado basecalling)
 - A Kraken2 database
-- *(Optional)* a reference FASTA for polishing
-
 ---
 
 ## Running the pipeline
@@ -67,7 +64,7 @@ Each step below lists its **script**, its **input → output**, and the command 
 
 ### Phase 1 · Basecalling & preprocessing (steps 1–5)
 
-**1 · Basecalling** *(GPU recommended)*
+**1 · Basecalling**
 `basecall_dorado_sup.sh` — POD5 directory → basecalled BAM
 ```bash
 bash basecall_dorado_sup.sh
@@ -93,14 +90,13 @@ bash chopper_filter.sh
 
 **5 · Filter BAM by filtered read IDs**
 `filter_bam_by_fastq.py` — filtered FASTQ + original BAM → filtered BAM
-Ensures the BAM and FASTQ contain **exactly the same reads**.
 ```bash
 python filter_bam_by_fastq.py
 ```
 
 ### Phase 2 · Assembly & polishing (steps 6–9)
 
-**6 · Assembly** *(choose one assembler)*
+**6 · Assembly**
 
 *Option A — nanoMDBG*
 `nanomdbg_assembly.sh` — filtered FASTQ → assembled contigs FASTA
@@ -126,71 +122,70 @@ bash dorado_polish.sh
 bash dorado_align.sh
 ```
 
-### Phase 3 · Methylation & annotation (steps 10–15)
+### Phase 3 · Annotation & methylation (steps 10–15)
 
-**10 · Modification pileup**
+**10 · Plasmid / chromosome identification**
+`mobsuite.sh` — assembly FASTA → `contig_report.txt`
+```bash
+bash mobsuite.sh
+```
+
+**11 · AMR detection**
+`amrfinder.sh` — assembly FASTA → AMRFinderPlus results
+```bash
+bash amrfinder.sh
+```
+
+**12 · Taxonomic classification**
+`kraken2.sh` — assembly FASTA → Kraken2 contig classification
+```bash
+bash kraken2.sh
+```
+
+**13 · Modification pileup**
 `modkit_pileup.sh` — aligned BAM + polished assembly → modification pileup BED
 ```bash
 bash modkit_pileup.sh
 ```
 
-**11 · Contigs as bins**
+**14 · Contigs as bins**
 `make_contig_bins.py` — assembly FASTA → contig-bin TSV
 Used to force **contig-level motif discovery**.
 ```bash
 python make_contig_bins.py
 ```
 
-**12 · Motif discovery (Nanomotif)**
+**15 · Motif discovery (Nanomotif)**
 `nanomotif.sh` — assembly FASTA + modification pileup BED + contig-bin TSV → `bin-motifs.tsv`
-Discovers the methylation motifs. It is **contig-level** because each contig is fed as its own bin. `bin-motifs.tsv` (columns `bin`, `motif`, `mod_position`, `mod_type`, …) is the source of the motif list used by both host-association routes.
+Discovers the methylation motifs. It is **contig-level** because each contig is fed as its own bin. `bin-motifs.tsv` (columns `bin`, `motif`, `mod_position`, `mod_type`, …) is the source of the motif list used by epimetheus.
 ```bash
 bash nanomotif.sh
 ```
 
-**12b · Methylation scoring (epimetheus)**
+**15b · Methylation scoring (epimetheus)**
 `epimetheus4contig.sh` — sorted + bgzipped modkit pileup + polished assembly + motif list → `motifs-scored-read-methylation.tsv`
-Builds the motif list from `bin-motifs.tsv` (joining `motif`, `mod_type`, `mod_position` into `motif_modtype_modposition`) and scores per-contig methylation with `epimetheus methylation-pattern contig`. This table is the `--nanomotif-dir` input to `similarity_scores.py` (step 16).
+Builds the motif list from `bin-motifs.tsv` (joining `motif`, `mod_type`, `mod_position` into `motif_modtype_modposition`) and scores per-contig methylation with `epimetheus methylation-pattern contig`. This table is the `--nanomotif-dir` input to `cupid_contig.py` (step 16).
 ```bash
 bash epimetheus4contig.sh
-```
-
-**13 · Plasmid / chromosome identification**
-`mobsuite.sh` — assembly FASTA → `contig_report.txt`
-```bash
-bash mobsuite.sh
-```
-
-**14 · AMR detection**
-`amrfinder.sh` — assembly FASTA → AMRFinderPlus results
-```bash
-bash amrfinder.sh
-```
-
-**15 · Taxonomic classification**
-`kraken2.sh` — assembly FASTA → Kraken2 contig classification
-```bash
-bash kraken2.sh
 ```
 
 ### Phase 4 · Host association (step 16)
 
 **16 · AMR host association** *(final inference step)*
-`similarity_scores.py` — combines the Nanomotif, MobSuite, AMRFinderPlus and Kraken2 outputs into a single host-association table.
+`cupid_contig.py` — combines the Nanomotif, MobSuite, AMRFinderPlus and Kraken2 outputs into a single host-association table.
 
 Each AMR-carrying plasmid is scored against every classified chromosome contig by methylation-vector similarity and assigned to the best-scoring host:
 
 ```
-final_score = max(0, 1 − RMSD) × n_shared_motifs
+css = max(0, 1 − RMSD) × n_shared_motifs
 ```
 
-where RMSD is the root-mean-square deviation between the two contigs' Nanomotif methylation values over their shared motifs. A higher `final_score` means a better host match.
+where RMSD is the root-mean-square deviation between the two contigs' Nanomotif methylation values over their shared motifs. A higher `css` means a better host match.
 
 **Principles**
 - Uses only **AMR-carrying** plasmids as queries
 - Plasmids are linked only to **chromosome** contigs
-- Similarity is computed on **Nanomotif methylation vectors**
-- Kraken2 taxonomy is used only for **annotation** — never to place or score contigs
+- Kraken2 taxonomy is used only for **annotation**
 
 ```bash
 python similarity_scores.py \
@@ -201,13 +196,12 @@ python similarity_scores.py \
   --outdir        /path/to/final_results
 ```
 
-The assignment table is written for **every** AMR-carrying plasmid on every run. To also generate per-contig figures for one or more specific contigs, add `--only-contig` (and optionally `--prefix` to tag outputs with a sample ID):
+The assignment table is written for **every** AMR-carrying plasmid on every run. To also generate per-contig figures for one or more specific contigs, add `--only-contig`:
 
 ```bash
 python similarity_scores.py \
   ... \
   --only-contig ctg123 \
-  --prefix S1
 ```
 
 For each requested contig this produces:
@@ -246,16 +240,15 @@ One row per **AMR-carrying plasmid** — the single table produced on every run 
 A persistent `species_colors.json` is also written/updated so taxa keep consistent colours across runs (override the path with `--color-map`).
 
 ---
-
 ## Read-level host association
 
 `read_similarity_scores.py` — a **per-read** alternative to step 16. Instead of assembled contigs, it works directly on **individual reads**: each AMR-carrying read is scored against the pool of classified chromosome reads by methylation similarity, using the same score
 
 ```
-final_score = max(0, 1 − RMSD) × n_shared_motifs
+rss = max(0, 1 − RMSD) × n_shared_motifs
 ```
 
-computed on the **mean** methylation probability per motif. A numba-compiled inner loop and a multiprocessing pool let it scale to very large read sets. Use this flow when MobSuite / AMRFinderPlus / Kraken2 were run **per read** (quasi-metagenomic reads classified individually) rather than on the assembly.
+computed on the **mean** methylation probability per motif.
 
 ### Generating the per-read methylation table
 
@@ -294,13 +287,12 @@ bash epimetheus4read.sh
 | `--outdir` | Output directory |
 
 ```bash
-python read_similarity_scores.py \
+python cupid_read.py \
   --read-motif-dir /path/to/read_motif \
   --read-types     /path/to/mobsuite/contig_report.txt \
   --amr-dir        /path/to/amrfinder \
   --kraken-dir     /path/to/kraken \
   --outdir         /path/to/read_results \
-  --dataset        M3 \
   --workers        8
 ```
 
