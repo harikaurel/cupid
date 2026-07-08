@@ -1,10 +1,35 @@
-# AMR-Carrying Plasmid–Host Association Pipeline
+<table>
+<tr>
+<td>
 
-A **modular, end-to-end pipeline** that takes Oxford Nanopore sequencing data all the way from **raw electrical signals** to **AMR-carrying plasmid → host associations**.
+# CUPID: Contig- and Unassembled-read-based Pathogen Identification & Delineation
 
-Host association is inferred from **methylation-pattern similarity** (Nanomotif): each AMR-carrying plasmid is linked to the chromosome contig whose methylation profile it most closely matches. **Taxonomic classification** (Kraken2) is used **strictly for annotation** — never for distance calculation or inference — and **AMR genes** are detected with **AMRFinderPlus**.
+**An AMR-Carrying Plasmid–Host Association Pipeline**
 
-Each step is a **standalone script**, but the steps are designed to run **in the order below**.
+A **modular, end-to-end pipeline** that takes Oxford Nanopore sequencing data all
+the way from **raw electrical signals** to **AMR-carrying plasmid → host associations**.
+
+</td>
+<td width="180">
+<img src="CUPID.png" alt="CUPID logo" width="160" />
+</td>
+</tr>
+</table>
+
+Host association is inferred from **methylation-pattern similarity**. Methylation
+motifs are discovered with **Nanomotif**, and each AMR-carrying plasmid is linked to
+the chromosome contig (or read) whose methylation profile it most closely matches.
+This matching is quantified by the **CUPID** pipeline through the **contig similarity
+score (css)** and **read similarity score (rss)** — pairwise scores over the
+methylation rates of genetically shared motifs (RMSD-based; css = RMSS × n). The
+top-scoring chromosomal unit is taken as the putative host.
+
+**Taxonomic classification** (Kraken2) is used **strictly for annotation** — never
+for distance calculation or association inference — and **AMR genes** are detected
+with **AMRFinderPlus**.
+
+Each step is a **standalone script**, but the steps are designed to run **in the
+order below**.
 
 ---
 
