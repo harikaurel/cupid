@@ -52,3 +52,8 @@ CMD+=(
 # Run
 # ------------------------------------------------------------
 "${CMD[@]}" > "$OUTPUT_BAM"
+
+"$DORADO_BIN" demux \
+  --output-dir "$DEMUX_DIR" \
+  --no-classify \
+  "$OUTPUT_BAM"
