@@ -1,25 +1,14 @@
-<table>
-<tr>
-<td>
-
-# CUPID: Contig- and Unassembled-read-based Pathogen Identification & Delineation
+## CUPID: Contig- and Unassembled-read-based Pathogen Identification & Delineation
 
 **An AMR-Carrying Plasmid–Host Association Pipeline**
 
 A **modular, end-to-end pipeline** that takes Oxford Nanopore sequencing data all
 the way from **raw electrical signals** to **AMR-carrying plasmid → host associations**.
 
-</td>
-<td width="180">
-<img src="CUPID.png" alt="CUPID logo" width="160" />
-</td>
-</tr>
-</table>
-
 Host association is inferred from **methylation-pattern similarity**. Methylation
 motifs are discovered with **Nanomotif**, and each AMR-carrying plasmid is linked to
 the chromosome contig (or read) whose methylation profile it most closely matches.
-This matching is quantified by the **CUPID** pipeline through the **contig similarity
+This matching is quantified by the **CUPID**  pipeline through the **contig similarity
 score (css)** and **read similarity score (rss)** — pairwise scores over the
 methylation rates of genetically shared motifs (RMSD-based; css = RMSS × n). The
 top-scoring chromosomal unit is taken as the putative host.
