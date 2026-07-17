@@ -1,13 +1,7 @@
-\usepackage{graphicx}
-
-% --- title block ---
-\noindent
-\raisebox{-0.3\height}{\includegraphics[height=1cm]{cupid.png}}%
-\hspace{0.6em}%
-{\Large\bfseries CUPID: Contig- and Unassembled-read-based Pathogen
-Identification \& Delineation}
-
-\medskip
+<h2>
+  <img src="cupid.png" alt="CUPID logo" height="40" align="middle"/>
+  &nbsp;CUPID: Contig- and Unassembled-read-based Pathogen Identification &amp; Delineation
+</h2>
 
 **An AMR-Carrying Plasmid–Host Association Pipeline**
 
