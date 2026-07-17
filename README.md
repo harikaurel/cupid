@@ -1,4 +1,4 @@
-<img src="cupid.png" alt="CUPID logo" height="110" align="left"/>
+<img src="cupid.png" alt="CUPID logo" height="210" align="left"/>
 
 ### CUPID: Contig- and Unassembled-read-based Pathogen Identification & Delineation
 
