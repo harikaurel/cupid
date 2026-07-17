@@ -2,6 +2,8 @@
 
 ### CUPID: Contig- and Unassembled-read-based Pathogen Identification & Delineation
 
+📄 **Preprint:** [Nanopore metagenomic sequencing links clinically relevant resistance determinants to pathogens](https://www.biorxiv.org/content/10.64898/2026.02.16.706128v2)
+
 **An AMR-Carrying Plasmid–Host Association Pipeline**
 
 A **modular, end-to-end pipeline** that takes Oxford Nanopore sequencing data all
