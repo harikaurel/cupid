@@ -1,7 +1,6 @@
-<h2>
-  <img src="cupid.png" alt="CUPID logo" height="40" align="middle"/>
-  &nbsp;CUPID: Contig- and Unassembled-read-based Pathogen Identification &amp; Delineation
-</h2>
+<img src="cupid.png" alt="CUPID logo" height="110" align="left"/>
+
+### CUPID: Contig- and Unassembled-read-based Pathogen Identification & Delineation
 
 **An AMR-Carrying Plasmid–Host Association Pipeline**
 
