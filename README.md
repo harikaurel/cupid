@@ -1,4 +1,13 @@
-## CUPID: Contig- and Unassembled-read-based Pathogen Identification & Delineation
+\usepackage{graphicx}
+
+% --- title block ---
+\noindent
+\raisebox{-0.3\height}{\includegraphics[height=1cm]{cupid.png}}%
+\hspace{0.6em}%
+{\Large\bfseries CUPID: Contig- and Unassembled-read-based Pathogen
+Identification \& Delineation}
+
+\medskip
 
 **An AMR-Carrying Plasmid–Host Association Pipeline**
 
@@ -13,9 +22,9 @@ score (css)** and **read similarity score (rss)** — pairwise scores over the
 methylation rates of genetically shared motifs (RMSD-based; css = RMSS × n). The
 top-scoring chromosomal unit is taken as the putative host.
 
-**Taxonomic classification** (Kraken2) is used **strictly for annotation** — never
-for distance calculation or association inference — and **AMR genes** are detected
-with **AMRFinderPlus**.
+Taxonomic classification (Kraken2) is used for annotation (never
+for distance calculation or association inference) and AMR genes are detected
+with AMRFinderPluS.
 
 Each step is a **standalone script**, but the steps are designed to run **in the
 order below**.
@@ -42,19 +51,18 @@ order below**.
 
 ### External tools
 
-| Tool | Role in the pipeline |
-| --- | --- |
-| `dorado` | Basecalling, read alignment, assembly polishing |
-| `samtools` | BAM manipulation |
-| `chopper` | Read quality & length filtering |
-| `nanoMDBG`| Metagenome assembly |
-| `modkit` | Methylation pileup |
-| `mob_suite` | Plasmid / chromosome classification |
-| `amrfinder` | AMR gene detection |
-| `kraken2` | Taxonomic annotation |
-| `nanomotif` | Methylation motif discovery|
-| `epimetheus` | contig- and read-level methylation values |
-| `cupid` | host association in contig- and read-level|
+| Tool | Version | Role in the pipeline |
+| --- | --- | --- |
+| `dorado` | v0.9.1 (model `dna_r10.4.1_e8.2_400bps_sup@v5.0.0`) | Basecalling, read alignment, assembly polishing |
+| `samtools` | v1.21 | BAM manipulation |
+| `chopper` | v0.11.0 | Read quality & length filtering |
+| `nanoMDBG`| v1.0 | Metagenome assembly |
+| `modkit` | v0.5.0 | Methylation pileup |
+| `mob_suite` | v3.1.9 | Plasmid / chromosome classification |
+| `amrfinder` | v4.0.23 (DB 2024-10-22.1) | AMR gene detection |
+| `kraken2` | v2.1.3 | Taxonomic annotation |
+| `nanomotif` | v0.8.0 | Methylation motif discovery|
+| `epimetheus` | v0.8.2 | contig- and read-level methylation values |
 
 ### Python
 
