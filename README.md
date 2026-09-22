@@ -303,11 +303,28 @@ bash epimetheus4read.sh
 
 → `epimetheus/epimetheus_main.tsv` — the per-read methylation table, pointed to by `--read-motif-dir`.
 
+**3 · Per-read summary** — `epimetheus_read_summary.py` aggregates the per-site
+`epimetheus_main.tsv` (one row per motif occurrence, `quality` 0–255) into the
+per-read table CUPID scores on: probabilities (`quality / 255`) averaged over
+all occurrences of each motif within a read.
+
+```bash
+python epimetheus_read_summary.py \
+    --in  epimetheus/epimetheus_main.tsv \
+    --out epimetheus/read_motif_summary/read_motif_summary.tsv
+```
+
+→ `epimetheus/read_motif_summary/read_motif_summary.tsv` with columns
+`read_id`, `motif_mod_position`, `mean_prob`, `motif_count`. Point
+`--read-motif-dir` at this folder (it must contain only this TSV).
+The optional `motif_count` column feeds the `n=` annotations in the
+`--top-taxa-heatmap` figures.
+
 ### Inputs
 
 | Flag | Contents |
 | --- | --- |
-| `--read-motif-dir` | epimetheus per-read methylation table (`read_id`, `motif_mod_position`, `mean_prob`), e.g. `epimetheus/epimetheus_main.tsv`; `.tsv` or `.csv` |
+| `--read-motif-dir` | Folder containing the per-read motif summary from `epimetheus_read_summary.py` (`read_id`, `motif_mod_position`, `mean_prob`, optional `motif_count`) |
 | `--read-types` | MobSuite `contig_report.txt` giving each read a `molecule_type` (chromosome / plasmid) |
 | `--amr-dir` | AMRFinderPlus results (reads the `Element symbol` and `Element name` columns) |
 | `--kraken-dir` | Kraken2 per-read `*.out` and `*.report` |
