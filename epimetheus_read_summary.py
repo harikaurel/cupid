@@ -2,16 +2,18 @@
 """Aggregate per-site epimetheus_main.tsv into the per-read motif summary
 expected by cupid_read.py (--read-motif-dir input).
 
+Uses polars (multithreaded, streaming). Install with: pip install polars
+
 Output columns: read_id, motif_mod_position, mean_prob, motif_count
-  mean_prob   = mean(quality / 255) over all occurrences of the motif in the read
-  motif_count = number of occurrences (picked up by cupid_read.py for the
-                'n=' annotations in the top-taxa heatmaps)
+  motif_mod_position = motif_modtype_modposition (e.g. GATC_a_1)
+  mean_prob          = mean(quality / 255) over occurrences in the read
+  motif_count        = number of occurrences (used for 'n=' heatmap labels)
 """
 
 import argparse
 from pathlib import Path
 
-import pandas as pd
+import polars as pl
 
 
 def main():
@@ -24,28 +26,39 @@ def main():
                     help="drop read/motif pairs with fewer occurrences (default 1)")
     args = ap.parse_args()
 
-    df = pd.read_csv(args.inp, sep="\t",
-                     usecols=["read_id", "motif_seq", "mod_type", "mod_pos", "quality"],
-                     dtype={"read_id": str, "motif_seq": str, "mod_type": str})
-
-    df["quality"] = pd.to_numeric(df["quality"], errors="coerce")
-    df = df.dropna(subset=["quality"])
-
-    df["motif_mod_position"] = (df["motif_seq"].str.strip() + "_"
-                                + df["mod_type"].str.strip() + "-"
-                                + df["mod_pos"].astype(str).str.strip())
-    df["prob"] = df["quality"] / 255.0
-
-    g = (df.groupby(["read_id", "motif_mod_position"], sort=False)
-           .agg(mean_prob=("prob", "mean"), motif_count=("prob", "size"))
-           .reset_index())
-
-    if args.min_sites > 1:
-        g = g[g["motif_count"] >= args.min_sites]
+    lf = (
+        pl.scan_csv(
+            args.inp, separator="\t",
+            schema_overrides={"read_id": pl.Utf8, "motif_seq": pl.Utf8,
+                              "mod_type": pl.Utf8, "mod_pos": pl.Utf8,
+                              "quality": pl.Float64},
+        )
+        .select(["read_id", "motif_seq", "mod_type", "mod_pos", "quality"])
+        .drop_nulls("quality")
+        .with_columns(
+            pl.concat_str(
+                [pl.col("motif_seq").str.strip_chars(),
+                 pl.col("mod_type").str.strip_chars(),
+                 pl.col("mod_pos").str.strip_chars()],
+                separator="_",
+            ).alias("motif_mod_position"),
+            (pl.col("quality") / 255.0).alias("prob"),
+        )
+        .group_by(["read_id", "motif_mod_position"])
+        .agg(
+            pl.col("prob").mean().alias("mean_prob"),
+            pl.len().alias("motif_count"),
+        )
+        .filter(pl.col("motif_count") >= args.min_sites)
+        .select(["read_id", "motif_mod_position", "mean_prob", "motif_count"])
+        .sort("read_id")
+    )
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    g.to_csv(args.out, sep="\t", index=False)
-    print(f"[OK] {len(g)} read/motif rows from {df['read_id'].nunique()} reads -> {args.out}")
+    lf.sink_csv(args.out, separator="\t")
+
+    n = pl.scan_csv(args.out, separator="\t").select(pl.len()).collect().item()
+    print(f"[OK] {n:,} read/motif rows -> {args.out}")
 
 
 if __name__ == "__main__":
