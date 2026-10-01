@@ -283,9 +283,9 @@ python fragmentation.py \
     --motifs   /path/to/epimetheus/motifs-scored-read-methylation.tsv \
     --assembly /path/to/polished/sample.fasta \
     --mobsuite /path/to/mobsuite/sample/contig_report.txt \
-    --contig   ctg1874 \
+    --contig   query \
     --min-obs  1 \
-    --outdir   /path/to/fragment/ctg1874
+    --outdir   /path/to/fragment/query
 ```
 
 Optional: `--kraken2` and `--amrfinder` to also write remapped copies of those tables.
@@ -322,12 +322,12 @@ Fragmenting does not change the sequence, so no re-polishing is needed. Using `<
 
 ```bash
 python cupid_fragment.py \
-    --nanomotif-dir /path/to/fragment/ctg2602/epimetheus \
+    --nanomotif-dir /path/to/fragment/query/epimetheus \
     --mobsuite-dir  /path/to/mobsuite/sample \
     --amr-dir       /path/to/amrfinderplus/sample \
     --kraken-dir    /path/to/kraken2/sample \
-    --fragments     /path/to/fragment/ctg2602/ctg2602_fragments.tsv \
-    --outdir        /path/to/fragment/ctg2602/association \
+    --fragments     /path/to/fragment/query/query_fragments.tsv \
+    --outdir        /path/to/fragment/query/association \
     --only-contig   ctg2602
 ```
 
