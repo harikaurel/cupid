@@ -266,6 +266,72 @@ One row per **AMR-carrying plasmid** — the single table produced on every run 
 
 A persistent `species_colors.json` is also written/updated so taxa keep consistent colours across runs (override the path with `--color-map`).
 
+## Fragmented-chromosome host association
+
+Long chromosome contigs carry far more motif occurrences than a typical plasmid, so their methylation values are averaged over a much larger sequence. This optional route fragments chromosome contigs into pieces that carry the **same number of motif occurrences as the query plasmid**, then re-runs methylation scoring and host association on the fragmented assembly.
+
+### Step 1 · Motif discovery and full-contig motif counts
+
+Run **Nanomotif** (step 15) to discover the motifs, then **epimetheus** (step 15b) to count every occurrence of each motif across each whole contig. The fragmentation size is set from these counts, so the epimetheus table (with its `n_motif_obs` column) is the `--motifs` input.
+
+### Step 2 · Fragment the chromosomes
+
+`fragmentation.py`: epimetheus table + polished assembly + MobSuite report → fragmented assembly
+
+```bash
+python fragmentation.py \
+    --motifs   /path/to/epimetheus/motifs-scored-read-methylation.tsv \
+    --assembly /path/to/polished/sample.fasta \
+    --mobsuite /path/to/mobsuite/sample/contig_report.txt \
+    --contig   ctg1874 \
+    --min-obs  1 \
+    --outdir   /path/to/fragment/ctg1874
+```
+
+Optional: `--kraken2` and `--amrfinder` to also write remapped copies of those tables.
+
+**How fragmentation works**
+
+- `n_target` = total motif occurrences on the query contig (sum of `n_motif_obs` over its motifs; a motif counts as present only if `n_motif_obs >= --min-obs`).
+- Only MobSuite **chromosome** contigs are fragmented. Plasmids, unclassified contigs and the query itself are written unchanged.
+- A chromosome whose own total motif count is below `n_target` is left whole (it still remains a candidate host).
+- All other chromosomes are cut every `n_target` occurrences of their own motifs. Fragments are named `parent_1`, `parent_2`, ...
+
+**Outputs** (prefix = query contig name)
+
+| File | Contents |
+| --- | --- |
+| `<contig>_fragmented.fasta` | Full assembly with chromosomes replaced by their fragments |
+| `<contig>_fragments.tsv` | `fragment`, `parent`, `start`, `end`, `length`, `n_motifs`, `n_target` |
+| `<contig>_query_summary.tsv` | Query length and per-motif occurrence counts |
+| `<contig>_contig_report.frag.txt` | MobSuite report remapped to fragment names |
+| `<contig>_kraken2.frag.output` | Kraken2 output remapped (if `--kraken2`) |
+| `<contig>_amrfinder.frag.tsv` | AMRFinder table remapped (if `--amrfinder`) |
+
+### Step 3 · Re-score methylation on the fragmented assembly
+
+Fragmenting does not change the sequence, so no re-polishing is needed. Using `<contig>_fragmented.fasta` as the reference, re-run:
+
+1. `dorado_align.sh`: filtered BAM + fragmented FASTA → aligned BAM
+2. `modkit_pileup.sh`: aligned BAM + fragmented FASTA → modification pileup
+3. `epimetheus4contig.sh`: pileup + fragmented FASTA + original Nanomotif motif list → per-fragment methylation table
+
+### Step 4 · Host association on fragments
+
+`cupid_fragment.py`: same scoring as `cupid_contig.py` (step 16), with fragments as candidate hosts. The `--fragments` table links each fragment to its parent contig, so the original MobSuite, AMRFinderPlus and Kraken2 outputs can be used directly.
+
+```bash
+python cupid_fragment.py \
+    --nanomotif-dir /path/to/fragment/ctg2602/epimetheus \
+    --mobsuite-dir  /path/to/mobsuite/sample \
+    --amr-dir       /path/to/amrfinderplus/sample \
+    --kraken-dir    /path/to/kraken2/sample \
+    --fragments     /path/to/fragment/ctg2602/ctg2602_fragments.tsv \
+    --outdir        /path/to/fragment/ctg2602/association \
+    --only-contig   ctg2602
+```
+
+Outputs follow the same format as `cupid_contig.py` (`AMR_plasmid_assignment.tsv`, plus PCoA and heatmap figures for `--only-contig`), with fragments as host candidates.
 ---
 ## Read-level host association
 
