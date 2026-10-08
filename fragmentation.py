@@ -1,28 +1,47 @@
 #!/usr/bin/env python3
 """
-CUPID contig fragmentation, all in one.
+CUPID contig fragmentation, two modes.
 
-Given a contig of interest, this script:
-  1. Fragments MobSuite chromosomes so each fragment carries the same total
-     number of shared-motif occurrences as the query contig (n_target =
-     occurrences, in the query sequence, of motifs present on BOTH the
-     query's and that chromosome's nanomotif lists). Chromosomes sharing no
-     motif with the query are left whole. Plasmids, unclassified contigs and
-     the query are never fragmented.
-  2. Writes the full fragmented assembly (every input sequence exactly once,
-     fragments named parent_1, parent_2, ...).
-  3. Remaps the MobSuite contig report, Kraken2 output and AMRFinder table to
-     fragment names by duplicating each fragmented parent's rows per fragment
-     (mapping from the fragment table, no suffix parsing).
+Given a contig of interest (the query), this script fragments MobSuite
+chromosomes so that each fragment is comparable to the query, then writes
+the fragmented assembly and remapped annotation tables.
+
+Modes (--mode):
+  motif   (default) Each fragment carries the same total number of motif
+          occurrences as the query (n_target = sum of the query's motif
+          counts, from n_motif_obs if present, otherwise a sequence scan).
+          Only chromosomes sharing >= 1 motif with the query are cut; they
+          are cut on all of their own motifs every n_target occurrences.
+          Chromosomes whose total counts are below n_target are left whole.
+  length  Each fragment has the same length as the query (n_target = query
+          length in bp). All chromosomes are cut, no motif logic. A trailing
+          piece shorter than --min-frac * query length is merged into the
+          previous fragment. Chromosomes shorter than the query are left whole.
+
+Plasmids, unclassified contigs and the query itself are never fragmented.
 
 Outputs in --outdir (prefix = query contig name):
   <prefix>_fragmented.fasta
   <prefix>_fragments.tsv                fragment, parent, start, end, length,
-                                        n_motifs, n_target
+                                        n_motifs, n_target, mode
+  <prefix>_query_summary.tsv            (if --motifs given)
   <prefix>_contig_report.frag.txt
   <prefix>_kraken2.frag.output          (if --kraken2 given)
   <prefix>_amrfinder.frag.tsv           (if --amrfinder given)
 
+In length mode, n_motifs is NA and n_target is the query length (bp).
+Use a separate --outdir per mode; filenames are the same in both.
+
+Usage:
+  python fragmentation.py --mode motif \
+      --motifs epimetheus_table.tsv --assembly RS7.fasta \
+      --mobsuite contig_report.txt --kraken2 RS7.kraken2.out \
+      --amrfinder RS7.amrfinder.tsv --contig ctg2602 --outdir frag_motif/ctg2602
+
+  python fragmentation.py --mode length --min-frac 0.5 \
+      --assembly RS7.fasta --mobsuite contig_report.txt \
+      --kraken2 RS7.kraken2.out --amrfinder RS7.amrfinder.tsv \
+      --contig ctg2602 --outdir frag_length/ctg2602
 """
 
 import argparse
@@ -136,6 +155,7 @@ def read_mobsuite_types(path: str) -> dict:
 
 
 def fragment_by_motifs(seq, hit_positions, n_target):
+    """-> [(start, end, n_motifs)], cut every n_target occurrences."""
     if not hit_positions:
         return [(0, len(seq), 0)]
     hits = sorted(hit_positions)
@@ -149,6 +169,19 @@ def fragment_by_motifs(seq, hit_positions, n_target):
             start, count = end, 0
     if start < len(seq):
         frags.append((start, len(seq), count))
+    return frags
+
+
+def fragment_by_length(seq_len, win, min_frac):
+    """-> [(start, end)], windows of `win` bp; a trailing piece shorter than
+    min_frac * win is merged into the previous window."""
+    if seq_len <= win:
+        return [(0, seq_len)]
+    frags = [(s, min(s + win, seq_len)) for s in range(0, seq_len, win)]
+    if len(frags) > 1 and (frags[-1][1] - frags[-1][0]) < min_frac * win:
+        last = frags.pop()
+        prev = frags.pop()
+        frags.append((prev[0], last[1]))
     return frags
 
 
@@ -188,8 +221,15 @@ def remap_table(infile, outfile, frag_map, column=None, col_index=None,
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--motifs", required=True, help="nanomotif contig motifs TSV")
+    ap = argparse.ArgumentParser(
+        description="Fragment chromosomes to match a query contig, by motif "
+                    "occurrences (--mode motif) or by length (--mode length).")
+    ap.add_argument("--mode", choices=["motif", "length"], default="motif",
+                    help="fragmentation mode [motif]")
+    ap.add_argument("--motifs", default=None,
+                    help="nanomotif or epimetheus motif table "
+                         "(required for --mode motif; optional for --mode "
+                         "length, then only used for the query summary)")
     ap.add_argument("--assembly", required=True, help="assembly FASTA")
     ap.add_argument("--mobsuite", required=True, help="MobSuite contig_report.txt")
     ap.add_argument("--kraken2", default=None, help="Kraken2 output (headerless)")
@@ -200,95 +240,143 @@ def main():
     ap.add_argument("--min-obs", type=int, default=1,
                     help="for epimetheus tables: motif is present on a contig "
                          "only if n_motif_obs >= this [1]")
+    ap.add_argument("--min-frac", type=float, default=0.5,
+                    help="length mode: a trailing piece shorter than this "
+                         "fraction of the query length is merged into the "
+                         "previous fragment [0.5]")
     ap.add_argument("--outdir", required=True)
     args = ap.parse_args()
+
+    if args.mode == "motif" and not args.motifs:
+        sys.exit("--mode motif requires --motifs")
+    if not 0.0 <= args.min_frac <= 1.0:
+        sys.exit("--min-frac must be between 0 and 1")
 
     os.makedirs(args.outdir, exist_ok=True)
     prefix = os.path.join(args.outdir, args.contig)
 
-    per_contig_motifs, per_contig_obs = read_motif_table(args.motifs, args.min_obs)
-    if args.contig not in per_contig_motifs:
-        sys.exit(f"{args.contig} not found in motif table")
-
     seqs = read_fasta(args.assembly)
     if args.contig not in seqs:
         sys.exit(f"{args.contig} not found in assembly")
-
     mob_types = read_mobsuite_types(args.mobsuite)
-
     query_seq = seqs[args.contig]
-    query_motifs = sorted(per_contig_motifs[args.contig])
-    use_obs = bool(per_contig_obs)
-    if use_obs:
-        query_counts = {m: per_contig_obs[args.contig].get(m, 0)
-                        for m in query_motifs}
-        count_src = "n_motif_obs"
-    else:
-        query_counts = {m: len(motif_positions(query_seq, m[0]))
-                        for m in query_motifs}
-        count_src = "sequence scan"
-    for m, n in query_counts.items():
-        if n == 0:
-            print(f"warning: {m[0]}_{m[1]}_{m[2]} has 0 {count_src} counts "
-                  f"in {args.contig}", file=sys.stderr)
-    n_target = sum(query_counts.values())
-    if n_target == 0:
-        sys.exit(f"query {args.contig} has no counted motif sites")
+    query_len = len(query_seq)
 
-    # query summary: length and motif counts
-    qs_path = f"{prefix}_query_summary.tsv"
-    with open(qs_path, "w") as qs:
-        qs.write("query\tlength\tmotif\tn_occurrences\n")
-        for m in query_motifs:
-            qs.write(f"{args.contig}\t{len(query_seq)}\t"
-                     f"{m[0]}_{m[1]}_{m[2]}\t{query_counts[m]}\n")
-        qs.write(f"{args.contig}\t{len(query_seq)}\tTOTAL\t"
-                 f"{sum(query_counts.values())}\n")
-    print(f"query {args.contig}: {len(query_seq)} bp, "
-          f"{len(query_motifs)} motifs, n_target = {n_target} "
-          f"({count_src}) -> {qs_path}")
+    # --- motif counts for the query (needed in motif mode, summary otherwise) ---
+    per_contig_motifs, per_contig_obs = {}, {}
+    query_motifs, query_counts, use_obs = [], {}, False
+    if args.motifs:
+        per_contig_motifs, per_contig_obs = read_motif_table(args.motifs,
+                                                             args.min_obs)
+        if args.contig not in per_contig_motifs:
+            if args.mode == "motif":
+                sys.exit(f"{args.contig} not found in motif table")
+            print(f"warning: {args.contig} not in motif table; "
+                  f"no query summary", file=sys.stderr)
+        else:
+            query_motifs = sorted(per_contig_motifs[args.contig])
+            use_obs = bool(per_contig_obs)
+            if use_obs:
+                query_counts = {m: per_contig_obs[args.contig].get(m, 0)
+                                for m in query_motifs}
+                count_src = "n_motif_obs"
+            else:
+                query_counts = {m: len(motif_positions(query_seq, m[0]))
+                                for m in query_motifs}
+                count_src = "sequence scan"
+            for m, n in query_counts.items():
+                if n == 0:
+                    print(f"warning: {m[0]}_{m[1]}_{m[2]} has 0 {count_src} "
+                          f"counts in {args.contig}", file=sys.stderr)
+
+            qs_path = f"{prefix}_query_summary.tsv"
+            with open(qs_path, "w") as qs:
+                qs.write("query\tlength\tmotif\tn_occurrences\n")
+                for m in query_motifs:
+                    qs.write(f"{args.contig}\t{query_len}\t"
+                             f"{m[0]}_{m[1]}_{m[2]}\t{query_counts[m]}\n")
+                qs.write(f"{args.contig}\t{query_len}\tTOTAL\t"
+                         f"{sum(query_counts.values())}\n")
+            print(f"query {args.contig}: {query_len} bp, "
+                  f"{len(query_motifs)} motifs, "
+                  f"{sum(query_counts.values())} occurrences ({count_src}) "
+                  f"-> {qs_path}")
+
+    if args.mode == "motif":
+        n_target = sum(query_counts.values())
+        if n_target == 0:
+            sys.exit(f"query {args.contig} has no counted motif sites")
+        print(f"[motif mode] n_target = {n_target} occurrences")
+    else:
+        n_target = query_len
+        if n_target == 0:
+            sys.exit(f"query {args.contig} has length 0")
+        print(f"[length mode] window = {n_target} bp, "
+              f"min trailing piece = {int(args.min_frac * n_target)} bp")
 
     # --- fragmentation ---
     fa_path = f"{prefix}_fragmented.fasta"
     tab_path = f"{prefix}_fragments.tsv"
     frag_map = {}  # parent -> [fragment names], only for truly fragmented parents
-    n_fragmented = n_no_overlap = n_low_obs = 0
+    n_fragmented = n_no_overlap = n_too_small = 0
+    mode = args.mode
 
     with open(fa_path, "w") as fa, open(tab_path, "w") as tab:
-        tab.write("fragment\tparent\tstart\tend\tlength\tn_motifs\tn_target\n")
+        tab.write("fragment\tparent\tstart\tend\tlength\tn_motifs\t"
+                  "n_target\tmode\n")
 
         def write_seq(name, seq):
             fa.write(f">{name}\n")
             for i in range(0, len(seq), 80):
                 fa.write(seq[i:i + 80] + "\n")
 
+        def write_row(name, parent, s, e, nm):
+            tab.write(f"{name}\t{parent}\t{s}\t{e}\t{e - s}\t{nm}\t"
+                      f"{n_target}\t{mode}\n")
+
         for contig, seq in seqs.items():
             if contig == args.contig or mob_types.get(contig) != "chromosome":
                 write_seq(contig, seq)
                 continue
+
+            if mode == "length":
+                frags = fragment_by_length(len(seq), n_target, args.min_frac)
+                if len(frags) == 1:
+                    # shorter than (or about) one query length -> left whole
+                    n_too_small += 1
+                    write_seq(contig, seq)
+                    write_row(contig, contig, 0, len(seq), "NA")
+                    continue
+                n_fragmented += 1
+                names = []
+                for i, (s, e) in enumerate(frags, 1):
+                    name = f"{contig}_{i}"
+                    names.append(name)
+                    write_seq(name, seq[s:e])
+                    write_row(name, contig, s, e, "NA")
+                frag_map[contig] = names
+                continue
+
+            # motif mode
             own = per_contig_motifs.get(contig, set())
             shared = own & set(query_motifs)
-            # rule 1: no overlapping motif -> not fragmented (and not a
-            # candidate in the assignment anyway)
+            # rule 1: no overlapping motif -> not fragmented
             if not shared:
                 n_no_overlap += 1
                 write_seq(contig, seq)
                 continue
-            # rule 2: chromosome's own total counts must reach n_target,
-            # otherwise it cannot fill a single fragment -> left whole
-            # (still a candidate in the assignment script)
+            # rule 2: chromosome's own total counts must reach n_target
             if use_obs:
                 chrom_total = sum(per_contig_obs[contig].values())
             else:
                 chrom_total = sum(len(motif_positions(seq, m[0])) for m in own)
             if chrom_total < n_target:
-                n_low_obs += 1
+                n_too_small += 1
                 write_seq(contig, seq)
-                tab.write(f"{contig}\t{contig}\t0\t{len(seq)}\t{len(seq)}\t"
-                          f"{chrom_total}\t{n_target}\n")
+                write_row(contig, contig, 0, len(seq), chrom_total)
                 continue
-            # rule 3: cut on ALL of the chromosome's own motifs, every
-            # n_target occurrences (n_target = query total, fixed)
+            # rule 3: cut on all of the chromosome's own motifs,
+            # every n_target occurrences
             positions = []
             for m in own:
                 positions += motif_positions(seq, m[0])
@@ -296,7 +384,7 @@ def main():
             if len(frags) == 1:
                 write_seq(contig, seq)
                 s, e, c = frags[0]
-                tab.write(f"{contig}\t{contig}\t{s}\t{e}\t{e - s}\t{c}\t{n_target}\n")
+                write_row(contig, contig, s, e, c)
                 continue
             n_fragmented += 1
             names = []
@@ -304,12 +392,16 @@ def main():
                 name = f"{contig}_{i}"
                 names.append(name)
                 write_seq(name, seq[s:e])
-                tab.write(f"{name}\t{contig}\t{s}\t{e}\t{e - s}\t{c}\t{n_target}\n")
+                write_row(name, contig, s, e, c)
             frag_map[contig] = names
 
-    print(f"{n_fragmented} chromosomes fragmented, "
-          f"{n_no_overlap} skipped (no shared motif), "
-          f"{n_low_obs} skipped (total counts < n_target) -> {fa_path}")
+    if mode == "motif":
+        print(f"{n_fragmented} chromosomes fragmented, "
+              f"{n_no_overlap} skipped (no shared motif), "
+              f"{n_too_small} skipped (total counts < n_target) -> {fa_path}")
+    else:
+        print(f"{n_fragmented} chromosomes fragmented, "
+              f"{n_too_small} left whole (not longer than query) -> {fa_path}")
 
     # --- remapping ---
     remap_table(args.mobsuite, f"{prefix}_contig_report.frag.txt",
