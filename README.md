@@ -276,34 +276,60 @@ Run **Nanomotif** (step 15) to discover the motifs, then **epimetheus** (step 15
 
 ### Step 2 · Fragment the chromosomes
 
-`fragmentation.py`: epimetheus table + polished assembly + MobSuite report → fragmented assembly
+`fragmentation.py`: polished assembly + MobSuite report (+ epimetheus table in motif mode) → fragmented assembly
 
+Two modes are available via `--mode`:
+
+| Mode | Fragment size matched to the query by | Needs `--motifs` |
+| --- | --- | --- |
+| `motif` (default) | Total number of motif occurrences | Yes |
+| `length` | Length in bp | No (optional, only for the query summary) |
+
+**Motif mode**
 ```bash
-python fragmentation.py \
-    --motifs   /path/to/epimetheus/motifs-scored-read-methylation.tsv \
-    --assembly /path/to/polished/sample.fasta \
-    --mobsuite /path/to/mobsuite/sample/contig_report.txt \
-    --contig   query \
-    --min-obs  1 \
-    --outdir   /path/to/fragment/query
+python fragmentation.py --mode motif \
+    --motifs    /path/to/epimetheus/motifs-scored-read-methylation.tsv \
+    --assembly  /path/to/polished/sample.fasta \
+    --mobsuite  /path/to/mobsuite/sample/contig_report.txt \
+    --contig    query \
+    --min-obs   1 \
+    --outdir    /path/to/fragment_motif/query
 ```
 
-Optional: `--kraken2` and `--amrfinder` to also write remapped copies of those tables.
+**Length mode**
+```bash
+python fragmentation.py --mode length \
+    --assembly  /path/to/polished/sample.fasta \
+    --mobsuite  /path/to/mobsuite/sample/contig_report.txt \
+    --contig    query \
+    --min-frac  0.5 \
+    --outdir    /path/to/fragment_length/query
+```
+
+Optional: `--kraken2` and `--amrfinder` to also write remapped copies of those tables. Use a separate `--outdir` per mode, since output filenames are identical.
 
 **How fragmentation works**
 
-- `n_target` = total motif occurrences on the query contig (sum of `n_motif_obs` over its motifs; a motif counts as present only if `n_motif_obs >= --min-obs`).
-- Only MobSuite **chromosome** contigs are fragmented. Plasmids, unclassified contigs and the query itself are written unchanged.
-- A chromosome whose own total motif count is below `n_target` is left whole (it still remains a candidate host).
-- All other chromosomes are cut every `n_target` occurrences of their own motifs. Fragments are named `parent_1`, `parent_2`, ...
+In both modes, only MobSuite **chromosome** contigs are fragmented. Plasmids, unclassified contigs and the query itself are written unchanged. Fragments are named `parent_1`, `parent_2`, ... Chromosomes left whole remain candidate hosts.
+
+*Motif mode*
+- `n_target` = total motif occurrences on the query (sum of `n_motif_obs` over its motifs; a motif counts as present only if `n_motif_obs >= --min-obs`).
+- Chromosomes sharing no motif with the query are left whole.
+- Chromosomes whose own total motif count is below `n_target` are left whole.
+- All other chromosomes are cut every `n_target` occurrences of their own motifs.
+
+*Length mode*
+- `n_target` = query length in bp.
+- Chromosomes not longer than the query are left whole.
+- All other chromosomes are cut into windows of `n_target` bp. A trailing piece shorter than `--min-frac` × query length (default 0.5) is merged into the previous fragment.
 
 **Outputs** (prefix = query contig name)
 
 | File | Contents |
 | --- | --- |
 | `<contig>_fragmented.fasta` | Full assembly with chromosomes replaced by their fragments |
-| `<contig>_fragments.tsv` | `fragment`, `parent`, `start`, `end`, `length`, `n_motifs`, `n_target` |
-| `<contig>_query_summary.tsv` | Query length and per-motif occurrence counts |
+| `<contig>_fragments.tsv` | `fragment`, `parent`, `start`, `end`, `length`, `n_motifs`, `n_target`, `mode` (in length mode `n_motifs` is `NA` and `n_target` is the query length in bp) |
+| `<contig>_query_summary.tsv` | Query length and per-motif occurrence counts (if `--motifs` given) |
 | `<contig>_contig_report.frag.txt` | MobSuite report remapped to fragment names |
 | `<contig>_kraken2.frag.output` | Kraken2 output remapped (if `--kraken2`) |
 | `<contig>_amrfinder.frag.tsv` | AMRFinder table remapped (if `--amrfinder`) |
