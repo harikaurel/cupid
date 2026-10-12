@@ -302,7 +302,6 @@ python fragmentation.py --mode length \
     --assembly  /path/to/polished/sample.fasta \
     --mobsuite  /path/to/mobsuite/sample/contig_report.txt \
     --contig    query \
-    --min-frac  0.5 \
     --outdir    /path/to/fragment_length/query
 ```
 
